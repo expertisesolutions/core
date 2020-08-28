@@ -1,7 +1,7 @@
 """The Intelbras AMT Alarms integration."""
 import asyncio
-import errno
 import socket
+import time
 
 import crcengine
 import voluptuous as vol
@@ -25,7 +25,7 @@ CONFIG_SCHEMA = vol.Schema({DOMAIN: vol.Schema({})}, extra=vol.ALLOW_EXTRA)
 
 # TODO List the platforms that you want to support.
 # For your initial PR, limit it to 1 platform.
-PLATFORMS = ["alarm_control_panel"]
+PLATFORMS = ["alarm_control_panel", "sensor"]
 
 
 async def async_setup(hass: HomeAssistant, config: dict):
@@ -43,8 +43,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     print("setup")
 
     await alarm.wait_connection()
+    await alarm.async_update()
 
     for component in PLATFORMS:
+        print("component ", component)
         hass.async_create_task(
             hass.config_entries.async_forward_entry_setup(entry, component)
         )
@@ -82,6 +84,7 @@ class AlarmHub:
                 raise ValueError
 
         self.port = port
+        self._timeout = 2.0
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -89,22 +92,26 @@ class AlarmHub:
         self.socket.bind(("", port))
         self.socket.listen(1)
 
-        self.outstanding_buffer = bytes([])
         self.polling_task = None
+        self.reading_task = None
         self.update_event = asyncio.Event()
 
-        self.is_outdated = True
+        self.is_initialized = False
         self.crc = crcengine.create(0xAB, 8, 0, False, False, "", 0)
 
         # print("crc test ", self.crc([0x0b,0xe9,0x21,0x35,0x38,0x31,0x30,0x30,0x30,0x41,0x41,0x21,0x00]))
-        self.open_sensors = [False] * 48
-        self.partitions = [False, False, False, False]
+        self.open_sensors = [None] * 48
+        self.partitions = [None] * 4
         # self.open_sensors[0:47] = False
 
-        self.t1 = 0
         # self.t2 = 0
 
         self.listeners = []
+
+    @property
+    def name(self):
+        """Return unique name from device."""
+        return "AMTAlarm"
 
     async def send_request_zones(self):
         """Send Request Information packet."""
@@ -141,31 +148,29 @@ class AlarmHub:
         """Send Reverse Engineering Test."""
 
         # unsigned char buffer[] = {0x0b, 0xe9, 0x21, /* senha */ 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, /* fim da senha */ 0x41, 0x40 + partition, 0x21, 0x00};
-        if self.password is None:
-            raise ValueError
+        # self.t1 = 0x44
 
-        print("send test")
-        buf = bytes([])
-        buf = buf + b"\x0b\xe9" + bytes([0x21])
+        # while True: #if True: if self.password is None: raise
+        # ValueError
 
-        buf = buf + self.password.encode("utf-8")
-        if len(self.password) == 4:
-            buf = buf + b"00"
+        #     print("send test") buf = bytes([]) #buf = buf +
+        #     b"\x0b\xe9" + bytes([0x21]) buf = buf + b"\x0a\xe9" +
+        #     bytes([0x21])
 
-        buf = buf + b"\x40"
-        buf = buf + bytes([0x40 + 3])
-        buf = buf + bytes([self.t1]) + b"\x00"
-        self.t1 += 1
+        #     buf = buf + self.password.encode("utf-8") if
+        #     len(self.password) == 4: buf = buf + b"00"
 
-        crc = self.crc(buf)
-        buf = buf[0 : len(buf) - 1] + bytes([crc])
-        print("buf length ", len(buf))
-        print("req buf ", buf)
+        #     buf = buf + bytes([self.t1]) #buf = buf + bytes([0x40 + 3+
+        #     1]) buf = buf + bytes([0x21]) + b"\x00" self.t1 += 1
 
-        self.writer.write(buf)
-        await self.writer.drain()
+        #     crc = self.crc(buf) buf = buf[0 : len(buf) - 1] +
+        #     bytes([crc]) print("buf length ", len(buf)) print("req buf
+        #     ", buf)
 
-        print("wrote")
+        #     self.writer.write(buf) await self.writer.drain() await
+        #     asyncio.sleep(1)
+
+        #     print("wrote")
 
     async def __send_ack(self):
         print("sent ack")
@@ -180,7 +185,10 @@ class AlarmHub:
             or event == AMT_EVENT_CODE_AUTO_DESATIVACAO
             or event == AMT_EVENT_CODE_DESATIVACAO_VIA_COMPUTADOR_OU_TELEFONE
         ):
-            self.partitions[partition] = False
+            if partition == -1:
+                self.partitions = [False] * 4
+            else:
+                self.partitions[partition] = False
         elif (
             event == AMT_EVENT_CODE_ATIVACAO_PELO_USUARIO
             or event == AMT_EVENT_CODE_AUTO_ATIVACAO
@@ -188,9 +196,12 @@ class AlarmHub:
             or event == AMT_EVENT_CODE_ATIVACAO_POR_UMA_TECLA
             or event == AMT_EVENT_CODE_ATIVACAO_PARCIAL
         ):
-            self.partitions[partition] = True
+            if partition == -1:
+                self.partitions = [True] * 4
+            else:
+                self.partitions[partition] = True
         print("partitions ", self.partitions)
-        self.call_listeners()
+        self.__call_listeners()
 
     async def __handle_packet(self, packet):
         cmd = packet[0]
@@ -228,9 +239,7 @@ class AlarmHub:
             )
 
             print("event", ev_id, "from partition", partition, "and zone", zone)
-            print("second print")
             self.__handle_amt_event(ev_id, partition, zone, client_id)
-            print("third print")
 
             await self.__send_ack()
         elif (
@@ -261,11 +270,11 @@ class AlarmHub:
                 if (c >> i) & 1:
                     print("Partition ", i + 2, " armed")
 
-            self.is_outdated = False
+            self.is_initialized = True
             self.update_event.set()
-            self.call_listeners()
+            self.__call_listeners()
         else:
-            print("how to deal ", packet)
+            print("how to deal with ", packet, " ????")
 
     async def __handle_data(self):
         print("buffer size ", len(self.outstanding_buffer))
@@ -294,52 +303,61 @@ class AlarmHub:
     async def __handle_polling(self):
         """Handle read data from alarm."""
 
-        first_run = True
+        if self.password is None:
+            return
+        else:
+            while True:
+                print("polling loop")
+                try:
+                    await self.send_request_zones()
+                    await asyncio.sleep(1)
+
+                    if (
+                        self._read_timestamp is not None
+                        and time.monotonic() - self._read_timestamp >= self._timeout
+                    ):
+                        print("read timeout")
+                        self.polling_task = None
+                        await self.__accept_new_connection()
+                        return
+
+                except OSError:
+                    print("write failed")
+                    self.polling_task = None
+                    await self.__accept_new_connection()
+                    return
+                except Exception as e:
+                    print("write failed with exception", e)
+                    raise
+
+    async def __handle_read_from_stream(self):
+        """Handle read data from alarm."""
 
         while True:
+            print("read loop")
+            self._read_timestamp = time.monotonic()
+            data = await self.reader.read(4096)
+            if self.reader.at_eof():
+                print("EOF")
+                self.reading_task = None
+
+                await self.__accept_new_connection()
+
+                return  # should accept new connection
+            self.outstanding_buffer += data
+
             try:
-                print("reading non blocking")
-                self.socket.setblocking(False)
-                msg = self.client_socket.recv(4096)
-            except OSError as e:
-                self.socket.setblocking(True)
-                err = e.args[0]
-                if err != errno.EAGAIN and err != errno.EWOULDBLOCK:
-                    raise
-                else:
-                    print("no data")
-                    if self.password is None:
-                        await self.__send_ack()
-                    elif self.is_outdated and first_run:
-                        print("request")
-                        await self.send_request_zones()
-                        first_run = False
-
-                    print("wait read data")
-
-                    data = await self.reader.read(4096)
-                    print("read data")
-                    if self.reader.at_eof():
-                        print("EOF")
-                        return  # should accept new connection
-                    self.outstanding_buffer += data
-            else:
-                self.socket.setblocking(True)
-                print("array ", msg)
-                self.outstanding_buffer += msg
-
-                if self.is_outdated and first_run:  # may be called twice
-                    print("request")
-                    await self.send_request_zones()
-                    first_run = False
-
-            print("Handle read data from alarm ", len(self.outstanding_buffer))
-            await self.__handle_data()
+                await self.__handle_data()
+            except Exception as e:
+                print("Error parsing data ", e)
 
     async def wait_connection(self) -> bool:
         """Test if we can authenticate with the host."""
 
         print("wait")
+
+        self.outstanding_buffer = bytes([])
+        self.is_initialized = False
 
         loop = asyncio.get_event_loop()
         (self.client_socket, _) = await loop.sock_accept(self.socket)
@@ -367,22 +385,57 @@ class AlarmHub:
         print("async_update")
         if self.polling_task is None:
             self.polling_task = asyncio.create_task(self.__handle_polling())
+        if self.reading_task is None:
+            self.reading_task = asyncio.create_task(self.__handle_read_from_stream())
         print("async_update")
 
-        if self.is_outdated:
+        if not self.is_initialized:
             await self.update_event.wait()
+            self.update_event.clear()
         print("async_update")
+
+    async def __accept_new_connection(self):
+        self._read_timestamp = None
+        if self.polling_task is not None:
+            self.polling_task.cancel()
+            self.polling_task = None
+        if self.reading_task is not None:
+            self.reading_task.cancel()
+            self.reading_task = None
+        if self.client_socket is not None:
+            self.client_socket.close()
+
+        await self.wait_connection()
+        await self.async_update()
 
     def get_partitions(self):
-        """Return partitons array."""
+        """Return partitions array."""
         return self.partitions
+
+    def get_open_sensors(self):
+        """Return motion sensors states."""
+        return self.open_sensors
 
     def listen_event(self, listener):
         """Add object as listener."""
         if listener not in self.listeners:
             self.listeners.append(listener)
 
+    def remove_listen_event(self, listener):
+        """Add object as listener."""
+        if listener in self.listeners:
+            self.listeners.remove(listener)
+
     def __call_listeners(self):
         """Call all listeners."""
         for i in self.listeners:
             i.hub_update()
+
+    @property
+    def max_sensors(self):
+        """Return the maximum number of sensors the platform may have."""
+        return 36
+
+    def is_sensor_configured(self, index):
+        """Check if the numbered sensor is configured."""
+        return True

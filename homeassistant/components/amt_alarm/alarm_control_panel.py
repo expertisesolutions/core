@@ -13,6 +13,7 @@ from homeassistant.const import (  # ATTR_ATTRIBUTION,; STATE_ALARM_ARMED_AWAY,
     STATE_ALARM_ARMED_HOME,
     STATE_ALARM_ARMED_NIGHT,
     STATE_ALARM_DISARMED,
+    STATE_UNAVAILABLE,
 )
 from homeassistant.core import HomeAssistant
 
@@ -27,10 +28,12 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities
 ):
     """Set up Intelbras AMT Alarms from a config entry."""
-    panel = AlarmPanel(hass.data[DOMAIN][entry.entry_id])
+    hub = hass.data[DOMAIN][entry.entry_id]
+    panel = AlarmPanel(hub)
+    panel.update_state()
+    print("adding panel")
     async_add_entities([panel])
     # try:
-    await panel.async_update()
     # except
     return True
 
@@ -40,13 +43,21 @@ class AlarmPanel(AlarmControlPanelEntity):
 
     def __init__(self, hub):
         """Initialize the alarm."""
-        self._state = None
+        self._state = STATE_UNAVAILABLE
         self._by = "Felipe"
         self.hub = hub
 
     async def async_alarm_arm_home(self, code=None):
         """Send arm home command."""
         await self.hub.send_test()
+
+    async def async_added_to_hass(self):
+        """Entity was added to Home Assistant."""
+        self.hub.listen_event(self)
+
+    async def async_will_remove_from_hass(self):
+        """Entity was added to Home Assistant."""
+        self.hub.remove_listen_event(self)
 
     @property
     def should_poll(self):
@@ -56,7 +67,7 @@ class AlarmPanel(AlarmControlPanelEntity):
     @property
     def unique_id(self):
         """Return the unique id for the sync module."""
-        return "nhontehaontehoatnehoatn"
+        return self.name + ".alarm_panel"
 
     @property
     def name(self):
@@ -96,21 +107,27 @@ class AlarmPanel(AlarmControlPanelEntity):
         """Update the state of the device."""
         print("entity async update")
         await self.hub.async_update()
-        self.hub_update()
-        self.hub.listen_event(self)
 
-    def hub_update(self):
-        """Receive callback to update state from Hub."""
-        print("hub_update")
+    def update_state(self):
+        """Update synchronously to current state."""
         partitions = self.hub.get_partitions()
-        if partitions[1]:
+        old_state = self._state
+        if None in partitions:
+            self._state = STATE_UNAVAILABLE
+        elif partitions[1]:
             self._state = STATE_ALARM_ARMED_NIGHT
         elif partitions[0] or partitions[2] or partitions[3]:
             self._state = STATE_ALARM_ARMED_HOME
         else:
             self._state = STATE_ALARM_DISARMED
         print("partitions ", partitions)
-        self.async_write_ha_state()
+        return self._state != old_state
+
+    def hub_update(self):
+        """Receive callback to update state from Hub."""
+        print("hub_update")
+        if self.update_state():
+            self.async_write_ha_state()
 
     async def async_alarm_disarm(self, code=None):
         """Send disarm command."""
