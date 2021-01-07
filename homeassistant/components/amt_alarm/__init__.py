@@ -8,6 +8,7 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
 
 from .const import (
     AMT_EVENT_CODE_ATIVACAO_PARCIAL,
@@ -18,10 +19,53 @@ from .const import (
     AMT_EVENT_CODE_AUTO_DESATIVACAO,
     AMT_EVENT_CODE_DESATIVACAO_PELO_USUARIO,
     AMT_EVENT_CODE_DESATIVACAO_VIA_COMPUTADOR_OU_TELEFONE,
+    CONF_AWAY_MODE_ENABLED,
+    CONF_AWAY_PARTITION_1,
+    CONF_AWAY_PARTITION_2,
+    CONF_AWAY_PARTITION_3,
+    CONF_AWAY_PARTITION_4,
+    CONF_AWAY_PARTITION_LIST,
+    CONF_HOME_MODE_ENABLED,
+    CONF_HOME_PARTITION_1,
+    CONF_HOME_PARTITION_2,
+    CONF_HOME_PARTITION_3,
+    CONF_HOME_PARTITION_4,
+    CONF_HOME_PARTITION_LIST,
+    CONF_NIGHT_PARTITION_1,
+    CONF_NIGHT_PARTITION_2,
+    CONF_NIGHT_PARTITION_3,
+    CONF_NIGHT_PARTITION_4,
+    CONF_NIGHT_PARTITION_LIST,
+    CONF_PASSWORD,
+    CONF_PORT,
     DOMAIN,
 )
 
-CONFIG_SCHEMA = vol.Schema({DOMAIN: vol.Schema({})}, extra=vol.ALLOW_EXTRA)
+CONFIG_SCHEMA = vol.Schema(
+    {
+        DOMAIN: vol.Schema(
+            {
+                vol.Required(CONF_PORT): cv.port,
+                vol.Optional(CONF_PASSWORD): int,
+                vol.Optional(CONF_NIGHT_PARTITION_1): bool,
+                vol.Optional(CONF_NIGHT_PARTITION_2): bool,
+                vol.Optional(CONF_NIGHT_PARTITION_3): bool,
+                vol.Optional(CONF_NIGHT_PARTITION_4): bool,
+                vol.Optional(CONF_AWAY_MODE_ENABLED): bool,
+                vol.Optional(CONF_AWAY_PARTITION_1): bool,
+                vol.Optional(CONF_AWAY_PARTITION_2): bool,
+                vol.Optional(CONF_AWAY_PARTITION_3): bool,
+                vol.Optional(CONF_AWAY_PARTITION_4): bool,
+                vol.Optional(CONF_HOME_MODE_ENABLED): bool,
+                vol.Optional(CONF_HOME_PARTITION_1): bool,
+                vol.Optional(CONF_HOME_PARTITION_2): bool,
+                vol.Optional(CONF_HOME_PARTITION_3): bool,
+                vol.Optional(CONF_HOME_PARTITION_4): bool,
+            }
+        )
+    },
+    extra=vol.ALLOW_EXTRA,
+)
 
 # TODO List the platforms that you want to support.
 # For your initial PR, limit it to 1 platform.
@@ -37,7 +81,7 @@ async def async_setup(hass: HomeAssistant, config: dict):
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up Intelbras AMT Alarms from a config entry."""
     # TODO Store an API object for your platforms to access
-    alarm = AlarmHub(entry.data["port"], entry.data["password"])
+    alarm = AlarmHub(entry, entry.data["port"], entry.data["password"])
     hass.data[DOMAIN][entry.entry_id] = alarm
 
     print("setup")
@@ -76,15 +120,16 @@ class AlarmHub:
     TODO Remove this placeholder class and replace with things from your PyPI package.
     """
 
-    def __init__(self, port, password=None):
+    def __init__(self, config_entry, port, password=None):
         """Initialize."""
         if password is not None:
             self.password = str(password)
             if len(self.password) != 4 and len(self.password) != 6:
                 raise ValueError
 
+        self.config_entry = config_entry
         self.port = port
-        self._timeout = 2.0
+        self._timeout = 10.0
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -142,6 +187,30 @@ class AlarmHub:
         self.writer.write(buf)
         await self.writer.drain()
 
+        print("wrote")
+
+    async def send_arm_partition(self, partition):
+        """Send Request Information packet."""
+        if self.password is None:
+            raise ValueError
+
+        buf = bytes([])
+        buf = buf + b"\x0b\xe9\x21"
+
+        buf = buf + self.password.encode("utf-8")
+
+        if len(self.password) == 4:
+            buf = buf + b"00"
+
+        buf = buf + b"\x41"
+        buf = buf + bytes([0x40 + partition + 1])
+        buf = buf + b"\x21\x00"
+        crc = self.crc(buf)
+        buf = buf[0 : len(buf) - 1] + bytes([crc])
+        print("req buf ", buf)
+
+        self.writer.write(buf)
+        await self.writer.drain()
         print("wrote")
 
     async def send_test(self):
@@ -249,6 +318,10 @@ class AlarmHub:
         ):
             print("cmd 0xe9: ", packet)
             await self.__send_ack()
+        elif cmd == 0xE9 and len(packet) == 2 and packet[1] == 0xE1:
+            print("cmd 0xe9: ", packet)
+            print("We are using wrong password?")
+            await self.__send_ack()
         elif cmd == 0xE9 and len(packet) >= 3 * 8:
             print("cmd 0xe9 3*8: ", packet)
 
@@ -310,6 +383,7 @@ class AlarmHub:
                 print("polling loop")
                 try:
                     await self.send_request_zones()
+                    print("sleep (1s)")
                     await asyncio.sleep(1)
 
                     if (
@@ -328,6 +402,8 @@ class AlarmHub:
                     return
                 except Exception as e:
                     print("write failed with exception", e)
+                    self.polling_task = None
+                    await self.__accept_new_connection()
                     raise
 
     async def __handle_read_from_stream(self):
@@ -337,19 +413,23 @@ class AlarmHub:
             print("read loop")
             self._read_timestamp = time.monotonic()
             data = await self.reader.read(4096)
+            print("read returned from async call", time.monotonic())
             if self.reader.at_eof():
                 print("EOF")
                 self.reading_task = None
-
                 await self.__accept_new_connection()
+                return
 
-                return  # should accept new connection
             self.outstanding_buffer += data
 
             try:
                 await self.__handle_data()
             except Exception as e:
+                print("read returned from async call through exception")
                 print("Error parsing data ", e)
+                self.read_task = None
+                await self.__accept_new_connection()
+                raise
 
     async def wait_connection(self) -> bool:
         """Test if we can authenticate with the host."""
@@ -371,7 +451,35 @@ class AlarmHub:
 
     async def async_alarm_disarm(self, code=None):
         """Send disarm command."""
-        await self.send_test()
+
+    async def async_alarm_arm_night(self, code=None):
+        """Send disarm command."""
+        for i in range(4):
+            if CONF_NIGHT_PARTITION_LIST[i] in self.config_entry.data:
+                if self.config_entry.data[CONF_NIGHT_PARTITION_LIST[i]]:
+                    self.send_arm_partition(i)
+            else:
+                self.send_arm_partition(i)
+
+    async def async_alarm_arm_away(self, code=None):
+        """Send disarm command."""
+        if self.config_entry.data[CONF_AWAY_MODE_ENABLED]:
+            for i in range(4):
+                if CONF_AWAY_PARTITION_LIST[i] in self.config_entry.data:
+                    if self.config_entry.data[CONF_AWAY_PARTITION_LIST[i]]:
+                        self.send_arm_partition(i)
+                else:
+                    self.send_arm_partition(i)
+
+    async def async_alarm_arm_home(self, code=None):
+        """Send disarm command."""
+        if self.config_entry.data[CONF_HOME_MODE_ENABLED]:
+            for i in range(4):
+                if CONF_HOME_PARTITION_LIST[i] in self.config_entry.data:
+                    if self.config_entry.data[CONF_HOME_PARTITION_LIST[i]]:
+                        self.send_arm_partition(i)
+                else:
+                    self.send_arm_partition(i)
 
     def close(self):
         """Close and free resources."""
@@ -437,5 +545,14 @@ class AlarmHub:
         return 36
 
     def is_sensor_configured(self, index):
+        """Check if the numbered sensor is configured."""
+        return True
+
+    @property
+    def max_partitions(self):
+        """Return the maximum number of sensors the platform may have."""
+        return 4
+
+    def is_partition_configured(self, index):
         """Check if the numbered sensor is configured."""
         return True

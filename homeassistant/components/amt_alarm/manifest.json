@@ -7,7 +7,7 @@
   "ssdp": [],
   "zeroconf": [],
   "homekit": {},
-  "dependencies": ["alarm_control_panel"],
+  "dependencies": ["alarm_control_panel", "binary_sensor"],
   "codeowners": [
     "@felipealmeida"
   ]

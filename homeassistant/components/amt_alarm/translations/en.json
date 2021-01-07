@@ -9,12 +9,41 @@
             "unknown": "[%key:common::config_flow::error::unknown%]"
         },
         "step": {
+            "away_mode": {
+                "data": {
+                    "away_partition_1": "Away mode requires partition 1 to be: ",
+                    "away_partition_2": "Away mode requires partition 2 to be: ",
+                    "away_partition_3": "Away mode requires partition 3 to be: ",
+                    "away_partition_4": "Away mode requires partition 4 to be: ",
+                    "has_away_mode": "Enable away mode"
+                },
+                "title": "Configure Night mode partitions for Intelbras alarm panel"
+            },
+            "home_mode": {
+                "data": {
+                    "has_home_mode": "Enable home mode",
+                    "home_partition_1": "Home mode requires partition 1 to be: ",
+                    "home_partition_2": "Home mode requires partition 2 to be: ",
+                    "home_partition_3": "Home mode requires partition 3 to be: ",
+                    "home_partition_4": "Home mode requires partition 4 to be: "
+                },
+                "title": "Configure Night mode partitions for Intelbras alarm panel"
+            },
+            "night_mode": {
+                "data": {
+                    "night_partition_1": "Night mode requires partition 1 to be: ",
+                    "night_partition_2": "Night mode requires partition 2 to be: ",
+                    "night_partition_3": "Night mode requires partition 3 to be: ",
+                    "night_partition_4": "Night mode requires partition 4 to be: "
+                },
+                "title": "Configure Night mode partitions for Intelbras alarm panel"
+            },
             "user": {
                 "data": {
-                    "host": "[%key:common::config_flow::data::host%]",
                     "password": "[%key:common::config_flow::data::password%]",
-                    "username": "[%key:common::config_flow::data::username%]"
-                }
+                    "port": "[%key:common::config_flow::data::port%]"
+                },
+                "title": "Configuration for Intelbras alarm panel"
             }
         }
     },
