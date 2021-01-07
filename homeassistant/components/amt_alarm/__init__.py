@@ -84,13 +84,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     alarm = AlarmHub(entry, entry.data["port"], entry.data["password"])
     hass.data[DOMAIN][entry.entry_id] = alarm
 
-    print("setup")
-
     await alarm.wait_connection()
     await alarm.async_update()
 
     for component in PLATFORMS:
-        print("component ", component)
         hass.async_create_task(
             hass.config_entries.async_forward_entry_setup(entry, component)
         )
@@ -143,8 +140,10 @@ class AlarmHub:
 
         self.is_initialized = False
         self.crc = crcengine.create(0xAB, 8, 0, False, False, "", 0)
+        self.disarm_crc = crcengine.create(0xAB, 8, 0, False, False, "", 0xFF)
+        # self.disarm_crc = crcengine.create(0xBA, 8, 0, False, False, "", 0xFF)
+        # self.disarm_crc = self.crc
 
-        # print("crc test ", self.crc([0x0b,0xe9,0x21,0x35,0x38,0x31,0x30,0x30,0x30,0x41,0x41,0x21,0x00]))
         self.open_sensors = [None] * 48
         self.partitions = [None] * 4
         # self.open_sensors[0:47] = False
@@ -163,34 +162,27 @@ class AlarmHub:
         if self.password is None:
             raise ValueError
 
-        print("request zones")
         buf = bytes([])
         buf = buf + b"\x0a\xe9\x21"
-        print("request zones", buf)
 
         buf = buf + self.password.encode("utf-8")
-        print("request zones", buf)
 
         if len(self.password) == 4:
             buf = buf + b"00"
-        print("request zones", buf)
 
         buf = buf + b"\x5b\x21\x00"
-        print("request zones", buf)
         crc = self.crc(buf)
-        print("crc ", crc)
-        print("buf length ", len(buf))
         buf = buf[0 : len(buf) - 1] + bytes([crc])
-        print("buf length ", len(buf))
-        print("req buf ", buf)
+        print("req partition req buf ", buf)
 
         self.writer.write(buf)
         await self.writer.drain()
 
-        print("wrote")
-
     async def send_arm_partition(self, partition):
         """Send Request Information packet."""
+
+        # print("arm partition", partition+1)
+
         if self.password is None:
             raise ValueError
 
@@ -207,11 +199,36 @@ class AlarmHub:
         buf = buf + b"\x21\x00"
         crc = self.crc(buf)
         buf = buf[0 : len(buf) - 1] + bytes([crc])
-        print("req buf ", buf)
+        print("arm partition req buf ", buf)
 
         self.writer.write(buf)
         await self.writer.drain()
-        print("wrote")
+
+    async def send_disarm_partition(self, partition):
+        """Send Request Information packet."""
+
+        # print("arm partition", partition+1)
+
+        if self.password is None:
+            raise ValueError
+
+        buf = bytes([])
+        buf = buf + b"\x0b\xe9\x21"
+
+        buf = buf + self.password.encode("utf-8")
+
+        if len(self.password) == 4:
+            buf = buf + b"00"
+
+        buf = buf + b"\x44"
+        buf = buf + bytes([0x40 + partition + 1])
+        buf = buf + b"\x21\x00"
+        crc = self.disarm_crc(buf)
+        buf = buf[0 : len(buf) - 1] + bytes([crc])
+        print("disarm partition req buf ", buf)
+
+        self.writer.write(buf)
+        await self.writer.drain()
 
     async def send_test(self):
         """Send Reverse Engineering Test."""
@@ -242,13 +259,10 @@ class AlarmHub:
         #     print("wrote")
 
     async def __send_ack(self):
-        print("sent ack")
         self.writer.write(bytes([0xFE]))
         await self.writer.drain()
 
     def __handle_amt_event(self, event, partition, zone, client_id):
-        print("handle event")
-        print("partitions ", self.partitions)
         if (
             event == AMT_EVENT_CODE_DESATIVACAO_PELO_USUARIO
             or event == AMT_EVENT_CODE_AUTO_DESATIVACAO
@@ -269,10 +283,11 @@ class AlarmHub:
                 self.partitions = [True] * 4
             else:
                 self.partitions[partition] = True
-        print("partitions ", self.partitions)
         self.__call_listeners()
 
     async def __handle_packet(self, packet):
+        # print("handle packet", packet)
+
         cmd = packet[0]
         if cmd == 0xF7 and len(packet) == 1:
             print("cmd 0xf7: ", packet)
@@ -316,15 +331,12 @@ class AlarmHub:
             and len(packet) == 2
             and (packet[1] == 0xE5 or packet[1] == 0xFE)
         ):
-            print("cmd 0xe9: ", packet)
             await self.__send_ack()
         elif cmd == 0xE9 and len(packet) == 2 and packet[1] == 0xE1:
             print("cmd 0xe9: ", packet)
             print("We are using wrong password?")
             await self.__send_ack()
         elif cmd == 0xE9 and len(packet) >= 3 * 8:
-            print("cmd 0xe9 3*8: ", packet)
-
             for x in range(6):
                 c = packet[x + 1]
                 for i in range(8):
@@ -335,30 +347,27 @@ class AlarmHub:
             c = packet[1 + 8 + 8 + 8 + 3]
             for i in range(2):
                 self.partitions[i] = True if ((c >> i) & 1) else False
-                if (c >> i) & 1:
-                    print("Partition ", i, " armed")
+                # if (c >> i) & 1:
+                #     print("Partition ", i, " armed")
             c = packet[1 + 8 + 8 + 8 + 3 + 1]
             for i in range(2):
                 self.partitions[i + 2] = True if ((c >> i) & 1) else False
-                if (c >> i) & 1:
-                    print("Partition ", i + 2, " armed")
+                # if (c >> i) & 1:
+                #     print("Partition ", i + 2, " armed")
 
             self.is_initialized = True
             self.update_event.set()
             self.__call_listeners()
-        else:
-            print("how to deal with ", packet, " ????")
+        # else:
+        #     print("how to deal with ", packet, " ????")
 
     async def __handle_data(self):
-        print("buffer size ", len(self.outstanding_buffer))
-
         while len(self.outstanding_buffer) != 0:
             is_nope = self.outstanding_buffer[0] == 0xF7
             packet_size = 1 if is_nope else self.outstanding_buffer[0]
             packet_start = 1 if not is_nope else 0
 
             if not is_nope and len(self.outstanding_buffer) < packet_size + 1:
-                print("something is wrong")
                 break
 
             crc = packet_start
@@ -380,28 +389,23 @@ class AlarmHub:
             return
         else:
             while True:
-                print("polling loop")
                 try:
                     await self.send_request_zones()
-                    print("sleep (1s)")
                     await asyncio.sleep(1)
 
                     if (
                         self._read_timestamp is not None
                         and time.monotonic() - self._read_timestamp >= self._timeout
                     ):
-                        print("read timeout")
                         self.polling_task = None
                         await self.__accept_new_connection()
                         return
 
                 except OSError:
-                    print("write failed")
                     self.polling_task = None
                     await self.__accept_new_connection()
                     return
-                except Exception as e:
-                    print("write failed with exception", e)
+                except Exception:
                     self.polling_task = None
                     await self.__accept_new_connection()
                     raise
@@ -410,12 +414,9 @@ class AlarmHub:
         """Handle read data from alarm."""
 
         while True:
-            print("read loop")
             self._read_timestamp = time.monotonic()
             data = await self.reader.read(4096)
-            print("read returned from async call", time.monotonic())
             if self.reader.at_eof():
-                print("EOF")
                 self.reading_task = None
                 await self.__accept_new_connection()
                 return
@@ -424,17 +425,13 @@ class AlarmHub:
 
             try:
                 await self.__handle_data()
-            except Exception as e:
-                print("read returned from async call through exception")
-                print("Error parsing data ", e)
+            except Exception:
                 self.read_task = None
                 await self.__accept_new_connection()
                 raise
 
     async def wait_connection(self) -> bool:
         """Test if we can authenticate with the host."""
-
-        print("wait")
 
         self.outstanding_buffer = bytes([])
         self.is_initialized = False
@@ -444,8 +441,6 @@ class AlarmHub:
         (self.reader, self.writer) = await asyncio.open_connection(
             None, sock=self.client_socket
         )
-
-        print("waited")
 
         return True
 
@@ -490,17 +485,14 @@ class AlarmHub:
 
     async def async_update(self):
         """Asynchronously update hub state."""
-        print("async_update")
         if self.polling_task is None:
             self.polling_task = asyncio.create_task(self.__handle_polling())
         if self.reading_task is None:
             self.reading_task = asyncio.create_task(self.__handle_read_from_stream())
-        print("async_update")
 
         if not self.is_initialized:
             await self.update_event.wait()
             self.update_event.clear()
-        print("async_update")
 
     async def __accept_new_connection(self):
         self._read_timestamp = None

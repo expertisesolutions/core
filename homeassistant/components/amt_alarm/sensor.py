@@ -46,6 +46,21 @@ class AlarmSensor(BinarySensorEntity):
         self._state = STATE_UNAVAILABLE
 
     @property
+    def device_info(self):
+        """Return device information for this Entity."""
+        return {
+            "identifiers": {(DOMAIN, self.unique_id)},
+            "name": self.name,
+            "sw_version": "Unknown",
+            "via_device": (DOMAIN, self.panel_unique_id),
+        }
+
+    @property
+    def device_state_attributes(self):
+        """Return the state attributes."""
+        return {"device_id": self.unique_id}
+
+    @property
     def should_poll(self):
         """Declare this Entity as Push."""
         return False
@@ -62,6 +77,11 @@ class AlarmSensor(BinarySensorEntity):
     def name(self):
         """Return the name of the binary sensor, if any."""
         return self._name
+
+    @property
+    def panel_unique_id(self):
+        """Return the unique id for the original panel."""
+        return "Alarm Panel.alarm_panel"
 
     @property
     def unique_id(self):

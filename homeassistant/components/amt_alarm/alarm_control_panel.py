@@ -96,7 +96,6 @@ class AlarmPanel(AlarmControlPanelEntity):
     @property
     def state(self):
         """Return the state of the sensor."""
-        print("state being read")
         return self._state
 
     @property
@@ -133,7 +132,6 @@ class AlarmPanel(AlarmControlPanelEntity):
 
     async def async_update(self):
         """Update the state of the device."""
-        print("entity async update")
         await self.hub.async_update()
 
     def update_state(self):
@@ -184,12 +182,10 @@ class AlarmPanel(AlarmControlPanelEntity):
             else:
                 self._state = STATE_ALARM_DISARMED
 
-            print("partitions ", partitions)
-            return self._state != old_state
+        return self._state != old_state
 
     def hub_update(self):
         """Receive callback to update state from Hub."""
-        print("hub_update")
         if self.update_state():
             self.async_write_ha_state()
 
@@ -236,7 +232,7 @@ class PartitionAlarmPanel(AlarmControlPanelEntity):
     @property
     def panel_unique_id(self):
         """Return the unique id for the original panel."""
-        return self.name + ".alarm_panel"
+        return "Alarm Panel.alarm_panel"
 
     @property
     def unique_id(self):
@@ -251,7 +247,6 @@ class PartitionAlarmPanel(AlarmControlPanelEntity):
     @property
     def state(self):
         """Return the state of the sensor."""
-        print("state being read")
         return self._state
 
     @property
@@ -289,7 +284,6 @@ class PartitionAlarmPanel(AlarmControlPanelEntity):
 
     async def async_update(self):
         """Update the state of the device."""
-        print("entity async update")
         await self.hub.async_update()
 
     def update_state(self):
@@ -302,15 +296,13 @@ class PartitionAlarmPanel(AlarmControlPanelEntity):
             self._state = STATE_ALARM_ARMED_NIGHT
         else:
             self._state = STATE_ALARM_DISARMED
-        print("partitions ", partitions)
         return self._state != old_state
 
     def hub_update(self):
         """Receive callback to update state from Hub."""
-        print("hub_update")
         if self.update_state():
             self.async_write_ha_state()
 
     async def async_alarm_disarm(self, code=None):
         """Send disarm command."""
-        # await self.hub.async_alarm_disarm(code)
+        await self.hub.send_disarm_partition(self.index)
