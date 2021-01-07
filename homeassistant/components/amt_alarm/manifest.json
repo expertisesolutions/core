@@ -1,0 +1,14 @@
+{
+  "domain": "amt_alarm",
+  "name": "Intelbras AMT Alarms",
+  "config_flow": true,
+  "documentation": "https://www.home-assistant.io/integrations/amt_alarm",
+  "requirements": ["crcengine==0.2"],
+  "ssdp": [],
+  "zeroconf": [],
+  "homekit": {},
+  "dependencies": ["alarm_control_panel"],
+  "codeowners": [
+    "@felipealmeida"
+  ]
+}

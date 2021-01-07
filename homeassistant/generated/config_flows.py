@@ -18,6 +18,7 @@ FLOWS = [
     "almond",
     "ambiclimate",
     "ambient_station",
+    "amt_alarm",
     "apple_tv",
     "arcam_fmj",
     "atag",

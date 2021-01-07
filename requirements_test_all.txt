@@ -235,6 +235,9 @@ construct==2.10.56
 # homeassistant.components.coronavirus
 coronavirus==1.1.1
 
+# homeassistant.components.amt_alarm
+crcengine==0.2
+
 # homeassistant.scripts.credstash
 # credstash==1.15.0
 
