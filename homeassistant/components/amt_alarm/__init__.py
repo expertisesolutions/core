@@ -452,9 +452,9 @@ class AlarmHub:
         for i in range(4):
             if CONF_NIGHT_PARTITION_LIST[i] in self.config_entry.data:
                 if self.config_entry.data[CONF_NIGHT_PARTITION_LIST[i]]:
-                    self.send_arm_partition(i)
+                    await self.send_arm_partition(i)
             else:
-                self.send_arm_partition(i)
+                await self.send_arm_partition(i)
 
     async def async_alarm_arm_away(self, code=None):
         """Send disarm command."""
@@ -472,9 +472,9 @@ class AlarmHub:
             for i in range(4):
                 if CONF_HOME_PARTITION_LIST[i] in self.config_entry.data:
                     if self.config_entry.data[CONF_HOME_PARTITION_LIST[i]]:
-                        self.send_arm_partition(i)
+                        await self.send_arm_partition(i)
                 else:
-                    self.send_arm_partition(i)
+                    await self.send_arm_partition(i)
 
     def close(self):
         """Close and free resources."""

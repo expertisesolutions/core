@@ -60,15 +60,15 @@ class AlarmPanel(AlarmControlPanelEntity):
 
     async def async_alarm_arm_night(self, code=None):
         """Send arm night command."""
-        await self.hub.alarm_arm_night()
+        await self.hub.async_alarm_arm_night()
 
     async def async_alarm_arm_home(self, code=None):
         """Send arm home command."""
-        await self.hub.alarm_arm_home()
+        await self.hub.async_alarm_arm_home()
 
     async def async_alarm_arm_away(self, code=None):
         """Send arm away command."""
-        await self.hub.alarm_arm_away()
+        await self.hub.async_alarm_arm_away()
 
     async def async_added_to_hass(self):
         """Entity was added to Home Assistant."""
