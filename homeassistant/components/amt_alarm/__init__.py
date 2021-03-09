@@ -534,7 +534,7 @@ class AlarmHub:
     @property
     def max_sensors(self):
         """Return the maximum number of sensors the platform may have."""
-        return 36
+        return 48
 
     def is_sensor_configured(self, index):
         """Check if the numbered sensor is configured."""
