@@ -17,8 +17,43 @@ from .const import (
     AMT_EVENT_CODE_ATIVACAO_VIA_COMPUTADOR_OU_TELEFONE,
     AMT_EVENT_CODE_AUTO_ATIVACAO,
     AMT_EVENT_CODE_AUTO_DESATIVACAO,
+    AMT_EVENT_CODE_CORTE_DA_FIACAO_DOS_SENSORES,
+    AMT_EVENT_CODE_CORTE_OU_CURTO_CIRCUITO_NA_SIRENE,
+    AMT_EVENT_CODE_CURTO_CIRCUITO_NA_FIACAO_DOS_SENSORES,
     AMT_EVENT_CODE_DESATIVACAO_PELO_USUARIO,
     AMT_EVENT_CODE_DESATIVACAO_VIA_COMPUTADOR_OU_TELEFONE,
+    AMT_EVENT_CODE_DISPARO_DE_CERCA_ELETRICA,
+    AMT_EVENT_CODE_DISPARO_DE_ZONA,
+    AMT_EVENT_CODE_DISPARO_DE_ZONA_24H,
+    AMT_EVENT_CODE_DISPARO_OU_PANICO_DE_INCENDIO,
+    AMT_EVENT_CODE_DISPARO_SILENCIOSO,
+    AMT_EVENT_CODE_EMERGENCIA_MEDICA,
+    AMT_EVENT_CODE_FALHA_AO_COMUNICAR_EVENTO,
+    AMT_EVENT_CODE_FALHA_NA_LINHA_TELEFONICA,
+    AMT_EVENT_CODE_PANICO_AUDIVEL_OU_SILENCIOSO,
+    AMT_EVENT_CODE_PANICO_SILENCIOSO,
+    AMT_EVENT_CODE_PROBLEMA_EM_TECLADO_OU_RECEPTOR,
+    AMT_EVENT_CODE_RESTARAUCAO_BAT_PRINC_AUSENTE_OU_INVERTIDA,
+    AMT_EVENT_CODE_RESTARAUCAO_BAT_PRINC_BAIXA_OU_EM_CURTO_CIRCUITO,
+    AMT_EVENT_CODE_RESTARAUCAO_BATERIA_BAIXA_DE_SENSOR_SEM_FIO,
+    AMT_EVENT_CODE_RESTARAUCAO_CORTE_DA_FIACAO_DOS_SENSORES,
+    AMT_EVENT_CODE_RESTARAUCAO_CORTE_OU_CURTO_CIRCUITO_NA_SIRENE,
+    AMT_EVENT_CODE_RESTARAUCAO_CURTO_CIRCUITO_NA_FIACAO_DOS_SENSORES,
+    AMT_EVENT_CODE_RESTARAUCAO_DA_SUPERVISAO_SMART,
+    AMT_EVENT_CODE_RESTARAUCAO_DISPARO_DE_ZONA_24H,
+    AMT_EVENT_CODE_RESTARAUCAO_DISPARO_SILENCIOSO,
+    AMT_EVENT_CODE_RESTARAUCAO_FALHA_NA_REDE_ELETRICA,
+    AMT_EVENT_CODE_RESTARAUCAO_LINHA_TELEFONICA,
+    AMT_EVENT_CODE_RESTARAUCAO_PROBLEMA_EM_TECLADO_OU_RECEPTOR,
+    AMT_EVENT_CODE_RESTARAUCAO_SOBRECARGA_NA_SAIDA_AUXILIAR,
+    AMT_EVENT_CODE_RESTARAUCAO_TAMPER_DO_SENSOR,
+    AMT_EVENT_CODE_RESTARAUCAO_TAMPER_DO_TECLADO,
+    AMT_EVENT_CODE_RESTAURACAO_DE_DISPARO_DE_CERCA_ELETRICA,
+    AMT_EVENT_CODE_RESTAURACAO_DE_INCENDIO,
+    AMT_EVENT_CODE_RESTAURACAO_DISPARO_DE_ZONA,
+    AMT_EVENT_CODE_SENHA_DE_COACAO,
+    AMT_EVENT_CODE_TAMPER_DO_SENSOR,
+    AMT_EVENT_CODE_TAMPER_DO_TECLADO,
     CONF_AWAY_MODE_ENABLED,
     CONF_AWAY_PARTITION_1,
     CONF_AWAY_PARTITION_2,
@@ -146,6 +181,8 @@ class AlarmHub:
 
         self.open_sensors = [None] * 48
         self.partitions = [None] * 4
+        self.triggered_partitions = [None] * 4
+        self.triggered_sensors = [None] * 48
         # self.open_sensors[0:47] = False
 
         # self.t2 = 0
@@ -282,6 +319,57 @@ class AlarmHub:
                 self.partitions = [True] * 4
             else:
                 self.partitions[partition] = True
+        if (
+            event == AMT_EVENT_CODE_EMERGENCIA_MEDICA
+            or event == AMT_EVENT_CODE_DISPARO_OU_PANICO_DE_INCENDIO
+            or event == AMT_EVENT_CODE_PANICO_AUDIVEL_OU_SILENCIOSO
+            or event == AMT_EVENT_CODE_SENHA_DE_COACAO
+            or event == AMT_EVENT_CODE_PANICO_SILENCIOSO
+            or event == AMT_EVENT_CODE_DISPARO_DE_ZONA
+            or event == AMT_EVENT_CODE_DISPARO_DE_CERCA_ELETRICA
+            or event == AMT_EVENT_CODE_DISPARO_DE_ZONA_24H
+            or event == AMT_EVENT_CODE_TAMPER_DO_TECLADO
+            or event == AMT_EVENT_CODE_DISPARO_SILENCIOSO
+            or event == AMT_EVENT_CODE_CORTE_OU_CURTO_CIRCUITO_NA_SIRENE
+            or event == AMT_EVENT_CODE_PROBLEMA_EM_TECLADO_OU_RECEPTOR
+            or event == AMT_EVENT_CODE_FALHA_NA_LINHA_TELEFONICA
+            or event == AMT_EVENT_CODE_FALHA_AO_COMUNICAR_EVENTO
+            or event == AMT_EVENT_CODE_CORTE_DA_FIACAO_DOS_SENSORES
+            or event == AMT_EVENT_CODE_CURTO_CIRCUITO_NA_FIACAO_DOS_SENSORES
+            or event == AMT_EVENT_CODE_TAMPER_DO_SENSOR
+        ):
+            if zone != -1 and zone < 48:
+                self.triggered_sensors[zone] = True
+            if partition == -1:
+                self.triggered_partitions = [True] * 4
+            else:
+                self.triggered_paritions[partition] = True
+        if (
+            event == AMT_EVENT_CODE_RESTAURACAO_DE_INCENDIO
+            or event == AMT_EVENT_CODE_RESTAURACAO_DISPARO_DE_ZONA
+            or event == AMT_EVENT_CODE_RESTAURACAO_DE_DISPARO_DE_CERCA_ELETRICA
+            or event == AMT_EVENT_CODE_RESTARAUCAO_DISPARO_DE_ZONA_24H
+            or event == AMT_EVENT_CODE_RESTARAUCAO_TAMPER_DO_TECLADO
+            or event == AMT_EVENT_CODE_RESTARAUCAO_DISPARO_SILENCIOSO
+            or event == AMT_EVENT_CODE_RESTARAUCAO_DA_SUPERVISAO_SMART
+            or event == AMT_EVENT_CODE_RESTARAUCAO_SOBRECARGA_NA_SAIDA_AUXILIAR
+            or event == AMT_EVENT_CODE_RESTARAUCAO_FALHA_NA_REDE_ELETRICA
+            or event == AMT_EVENT_CODE_RESTARAUCAO_BAT_PRINC_BAIXA_OU_EM_CURTO_CIRCUITO
+            or event == AMT_EVENT_CODE_RESTARAUCAO_BAT_PRINC_AUSENTE_OU_INVERTIDA
+            or event == AMT_EVENT_CODE_RESTARAUCAO_CORTE_OU_CURTO_CIRCUITO_NA_SIRENE
+            or event == AMT_EVENT_CODE_RESTARAUCAO_PROBLEMA_EM_TECLADO_OU_RECEPTOR
+            or event == AMT_EVENT_CODE_RESTARAUCAO_LINHA_TELEFONICA
+            or event == AMT_EVENT_CODE_RESTARAUCAO_CORTE_DA_FIACAO_DOS_SENSORES
+            or event == AMT_EVENT_CODE_RESTARAUCAO_CURTO_CIRCUITO_NA_FIACAO_DOS_SENSORES
+            or event == AMT_EVENT_CODE_RESTARAUCAO_TAMPER_DO_SENSOR
+            or event == AMT_EVENT_CODE_RESTARAUCAO_BATERIA_BAIXA_DE_SENSOR_SEM_FIO
+        ):
+            if zone != -1 and zone < 48:
+                self.triggered_sensors[zone] = False
+            if partition == -1:
+                self.triggered_partitions = [False] * 4
+            else:
+                self.triggered_partitions[partition] = False
         self.__call_listeners()
 
     async def __handle_packet(self, packet):
@@ -509,6 +597,10 @@ class AlarmHub:
     def get_partitions(self):
         """Return partitions array."""
         return self.partitions
+
+    def get_triggered_partitions(self):
+        """Return partitions array."""
+        return self.triggered_partitions
 
     def get_open_sensors(self):
         """Return motion sensors states."""

@@ -14,6 +14,7 @@ from homeassistant.const import (
     STATE_ALARM_ARMED_HOME,
     STATE_ALARM_ARMED_NIGHT,
     STATE_ALARM_DISARMED,
+    STATE_ALARM_TRIGGERED,
     STATE_UNAVAILABLE,
 )
 from homeassistant.core import HomeAssistant
@@ -289,6 +290,7 @@ class PartitionAlarmPanel(AlarmControlPanelEntity):
     def update_state(self):
         """Update synchronously to current state."""
         partitions = self.hub.get_partitions()
+        triggered_partitions = self.hub.get_triggered_partitions()
         old_state = self._state
         if None in partitions:
             self._state = STATE_UNAVAILABLE
@@ -296,6 +298,8 @@ class PartitionAlarmPanel(AlarmControlPanelEntity):
             self._state = STATE_ALARM_ARMED_NIGHT
         else:
             self._state = STATE_ALARM_DISARMED
+        if triggered_partitions[self.index]:
+            self._state = STATE_ALARM_TRIGGERED
         return self._state != old_state
 
     def hub_update(self):
