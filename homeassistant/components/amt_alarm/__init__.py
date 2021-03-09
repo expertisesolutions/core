@@ -173,7 +173,6 @@ class AlarmHub:
         buf = buf + b"\x5b\x21\x00"
         crc = self.crc(buf)
         buf = buf[0 : len(buf) - 1] + bytes([crc])
-        print("req partition req buf ", buf)
 
         self.writer.write(buf)
         await self.writer.drain()
@@ -286,7 +285,6 @@ class AlarmHub:
         self.__call_listeners()
 
     async def __handle_packet(self, packet):
-        # print("handle packet", packet)
 
         cmd = packet[0]
         if cmd == 0xF7 and len(packet) == 1:
@@ -358,8 +356,8 @@ class AlarmHub:
             self.is_initialized = True
             self.update_event.set()
             self.__call_listeners()
-        # else:
-        #     print("how to deal with ", packet, " ????")
+        else:
+            print("how to deal with ", packet, " ????")
 
     async def __handle_data(self):
         while len(self.outstanding_buffer) != 0:
